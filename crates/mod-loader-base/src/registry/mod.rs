@@ -1,13 +1,17 @@
 use std::{collections::HashMap, fs::DirEntry, io::BufReader, ops::Deref, sync::Arc};
 
-mod manifest;
 mod fs;
+mod manifest;
 
+use crate::{
+    IoError, ModEnvironmentErrorReport, ModError, ModErrorReport,
+    alias::{Path, PathBuf},
+    log::{debug, warn},
+};
 use parking_lot::{Mutex, MutexGuard};
-use crate::{alias::{Path, PathBuf}, log::{info, warn}, IoError, ModEnvironmentErrorReport, ModError, ModErrorReport};
 
-pub use manifest::*;
 pub use fs::FileSystem;
+pub use manifest::*;
 
 #[derive(Debug)]
 struct ModInner {
@@ -21,7 +25,6 @@ pub struct Mod {
 }
 
 impl Mod {
-
     pub fn info(&self) -> &ModManifest {
         &self.inner.info
     }
@@ -29,7 +32,6 @@ impl Mod {
     pub fn fs(&self) -> MutexGuard<FileSystem> {
         self.inner.fs.lock()
     }
-
 }
 
 #[derive(Debug, Default)]
@@ -38,10 +40,7 @@ pub struct ModRegistry {
 }
 
 impl ModRegistry {
-
-    pub(crate) fn load(
-        mods_dir: impl AsRef<Path>,
-    ) -> Result<Self, ModEnvironmentErrorReport> {
+    pub(crate) fn load(mods_dir: impl AsRef<Path>) -> Result<Self, ModEnvironmentErrorReport> {
         let mods_dir = mods_dir.as_ref().to_path_buf();
         let mut mods = HashMap::new();
 
@@ -92,15 +91,10 @@ impl ModRegistry {
             mods.insert(mod_id, r#mod);
         }
 
-        let registry = Self {
-            mods,
-        };
+        let registry = Self { mods };
 
         if !errors.is_empty() {
-            Err(ModEnvironmentErrorReport::with_mod_errors(
-                errors,
-                registry,
-            ))
+            Err(ModEnvironmentErrorReport::with_mod_errors(errors, registry))
         } else {
             Ok(registry)
         }
@@ -110,56 +104,57 @@ impl ModRegistry {
         mods: &HashMap<String, Mod>,
         entry: DirEntry,
     ) -> Result<Option<Mod>, ModErrorReport> {
-        let path = PathBuf::from_path_buf(entry.path())
-            .map_err(|e| ModErrorReport::new(
+        let path = PathBuf::from_path_buf(entry.path()).map_err(|e| {
+            ModErrorReport::new(
                 entry.path().to_string_lossy().to_string(),
-                ModError::Utf8(e)
-            ))?;
+                ModError::Utf8(e),
+            )
+        })?;
 
-        let file_type = entry.file_type()
-            .map_err(|e| ModErrorReport::new(
+        let file_type = entry.file_type().map_err(|e| {
+            ModErrorReport::new(
                 path.clone(),
                 ModError::Io(IoError {
                     path: path.to_string(),
                     source: e,
-                })
-            ))?;
+                }),
+            )
+        })?;
         let file_name = path.file_name().unwrap_or_default();
 
         if file_name.starts_with('.') {
-            info!(
-                path = path.as_str(),
-                "Skipping hidden file or directory",
-            );
+            debug!(path = path.as_str(), "Skipping hidden file or directory",);
 
             return Ok(None);
         }
 
         let mut fs = if file_type.is_dir() {
-            FileSystem::new_disk(&path)
-                .map_err(|e| ModErrorReport::new(
+            FileSystem::new_disk(&path).map_err(|e| {
+                ModErrorReport::new(
                     path.clone(),
                     ModError::Io(IoError {
                         path: path.to_string(),
                         source: e,
-                    })
-                ))?
+                    }),
+                )
+            })?
         } else if file_type.is_file() {
             let extension = path.extension().unwrap_or_default();
 
             match extension {
-                "zip" => {},
+                "zip" => {}
                 _ => return Ok(None),
             }
 
-            FileSystem::new_zip(&path)
-                .map_err(|e| ModErrorReport::new(
+            FileSystem::new_zip(&path).map_err(|e| {
+                ModErrorReport::new(
                     path.clone(),
                     ModError::Io(IoError {
                         path: path.to_string(),
                         source: e,
-                    })
-                ))?
+                    }),
+                )
+            })?
         } else {
             warn!(
                 path = path.as_str(),
@@ -169,32 +164,34 @@ impl ModRegistry {
             return Ok(None);
         };
 
-        let manifest_reader = fs.read_file("mod.json")
-            .map(BufReader::new)
-            .map_err(|e| ModErrorReport::new(
+        let manifest_reader = fs.read_file("mod.json").map(BufReader::new).map_err(|e| {
+            ModErrorReport::new(
                 path.clone(),
                 ModError::Io(IoError {
                     path: path.join("mod.json").to_string(),
                     source: e,
-                })
-            ))?;
+                }),
+            )
+        })?;
 
-        let mod_info = serde_json::from_reader::<_, ModManifest>(manifest_reader)
-            .map_err(|e| ModErrorReport::new(
+        let mod_info = serde_json::from_reader::<_, ModManifest>(manifest_reader).map_err(|e| {
+            ModErrorReport::new(
                 path.clone(),
                 ModError::Json {
                     path: path.join("mod.json").to_string(),
                     source: e,
-                }
-            ))?;
+                },
+            )
+        })?;
 
         let mod_id = mod_info.id.clone();
 
         if mods.contains_key(&mod_id) {
             return Err(ModErrorReport::new(
                 path.clone(),
-                ModError::DuplicateModId(mod_id.clone())
-            ).with_id(mod_id));
+                ModError::DuplicateModId(mod_id.clone()),
+            )
+            .with_id(mod_id));
         }
 
         Ok(Some(Mod {
@@ -204,7 +201,6 @@ impl ModRegistry {
             }),
         }))
     }
-
 }
 
 impl Deref for ModRegistry {

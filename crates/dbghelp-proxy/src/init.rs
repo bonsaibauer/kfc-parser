@@ -1,4 +1,7 @@
-use std::path::PathBuf;
+use std::{
+    os::windows::ffi::OsStrExt,
+    path::PathBuf,
+};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use mod_loader::{lua::{self, RunArgs, RunOptions}, runtime, Config, ModEnvironment};
@@ -6,14 +9,40 @@ use mod_loader::{lua::{self, RunArgs, RunOptions}, runtime, Config, ModEnvironme
 use crate::{log::error, logging};
 
 pub fn init(config: Config) {
+    // ShroudForge owns the runtime when installed beside the EML proxy. Hand
+    // off to its existing game-root bootstrap instead of starting EML twice.
+    if let Some(bootstrap) = shroudforge_bootstrap_path() {
+        let wide_path = bootstrap
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect::<Vec<_>>();
+        if unsafe {
+            windows::Win32::System::LibraryLoader::LoadLibraryW(windows::core::PCWSTR(
+                wide_path.as_ptr(),
+            ))
+        }
+        .is_ok()
+        {
+            return;
+        }
+        let message = format!("ShroudForge winmm bootstrap could not be loaded from {bootstrap:?}");
+        if !mod_loader::append_shroudforge_diagnostic('E', "native-proxy", &message) {
+            error!("{message}");
+        }
+    }
+
     logging::setup();
 
-    let current_dir = std::env::current_dir()
-        .expect("Failed to get current directory");
-    let current_dir = Utf8PathBuf::from_path_buf(current_dir)
-        .expect("Current directory path is not valid UTF-8");
+    let game_directory = std::env::current_exe()
+        .expect("Failed to get game executable path")
+        .parent()
+        .expect("Game executable has no parent directory")
+        .to_path_buf();
+    let game_directory = Utf8PathBuf::from_path_buf(game_directory)
+        .expect("Game directory path is not valid UTF-8");
 
-    let env = match ModEnvironment::load(&current_dir) {
+    let env = match ModEnvironment::load(&game_directory) {
         Ok(env) => env,
         Err(e) => {
             if let Some(error) = e.error {
@@ -54,11 +83,11 @@ pub fn init(config: Config) {
     let result = lua::run(
         &env,
         RunArgs {
-            file_name: get_file_name(&current_dir),
+            file_name: get_file_name(&game_directory),
             options: RunOptions {
                 patch: true,
                 export: config.use_export_flag,
-                export_dir: config.export_directory.map(PathBuf::from),
+                export_dir: config.export_directory.map(Utf8PathBuf::from),
                 runtime: true,
                 ..Default::default()
             },
@@ -79,9 +108,26 @@ pub fn init(config: Config) {
     runtime::loader_attach(
         &env,
         runtime::RuntimeOptions {
-            dlls: result.dlls,
+            dlls: result
+                .dlls
+                .into_iter()
+                .map(Utf8PathBuf::into_std_path_buf)
+                .collect(),
         },
     ).expect("Failed to attach runtime loader");
+}
+
+pub(crate) fn shroudforge_bootstrap_available() -> bool {
+    shroudforge_bootstrap_path().is_some()
+}
+
+fn shroudforge_bootstrap_path() -> Option<PathBuf> {
+    // Launchers such as Steam may set an unrelated working directory. Resolve
+    // ShroudForge beside the running game executable instead.
+    let game_directory = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    let runtime = game_directory.join("shroudforge/shroudforge-runtime.dll");
+    let bootstrap = game_directory.join("winmm.dll");
+    (runtime.is_file() && bootstrap.is_file()).then_some(bootstrap)
 }
 
 pub fn deinit() {

@@ -1,11 +1,15 @@
+mod alias;
+mod config;
+mod env;
+mod error;
 mod log;
 mod registry;
-mod env;
-mod alias;
-mod error;
-mod config;
+mod shroudforge_log;
 
-pub use registry::*;
+pub use config::*;
 pub use env::*;
 pub use error::*;
-pub use config::*;
+pub use registry::*;
+pub use shroudforge_log::{
+    append_shroudforge_diagnostic, shroudforge_cache_dir, shroudforge_directory,
+};

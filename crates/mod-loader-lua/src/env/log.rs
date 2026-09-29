@@ -1,6 +1,6 @@
 use mlua::Table;
 
-use crate::{lua::LuaValue, log::{info, info_span, warn, warn_span}};
+use crate::{lua::LuaValue, log::{debug, debug_span, warn, warn_span}};
 
 pub fn register(
     lua: &mlua::Lua,
@@ -23,8 +23,8 @@ pub fn register(
                     output.push_str(&arg.to_string()?);
                 }
 
-                info_span!("lua", mod_id).in_scope(|| {
-                    info!("{}", output);
+                debug_span!("lua", mod_id).in_scope(|| {
+                    debug!("{}", output);
                 });
 
                 Ok(())

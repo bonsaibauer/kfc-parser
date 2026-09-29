@@ -1,9 +1,16 @@
-use std::{collections::HashMap, fs::File, io::{BufReader, Error, ErrorKind, Read, Result}};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{BufReader, Error, ErrorKind, Read, Result},
+};
 
 use walkdir::WalkDir;
 use zip::ZipArchive;
 
-use crate::{alias::{Path, PathBuf}, log::debug};
+use crate::{
+    alias::{Path, PathBuf},
+    log::debug,
+};
 
 pub trait FileRead: Read {}
 
@@ -17,7 +24,6 @@ pub enum FileSystem {
 }
 
 impl FileSystem {
-
     pub fn new_disk<P: AsRef<Path>>(root: P) -> Result<Self> {
         DiskFileSystem::new(root.as_ref()).map(Self::Disk)
     }
@@ -50,19 +56,11 @@ impl FileSystem {
         files
     }
 
-    pub fn read_directory<P: AsRef<Path>>(
-        &self,
-        path: P,
-    ) -> Result<Vec<Result<PathBuf>>> {
+    pub fn read_directory<P: AsRef<Path>>(&self, path: P) -> Result<Vec<Result<PathBuf>>> {
         let files = match self {
             Self::Disk(fs) => fs.read_directory(path.as_ref()),
             Self::Zip(fs) => fs.read_directory(path.as_ref()),
-            Self::Empty => {
-                Err(Error::new(
-                    ErrorKind::NotFound,
-                    "No file system available"
-                ))
-            }
+            Self::Empty => Err(Error::new(ErrorKind::NotFound, "No file system available")),
         };
 
         debug!(
@@ -75,10 +73,7 @@ impl FileSystem {
         files
     }
 
-    pub fn read_file<P: AsRef<Path>>(
-        &mut self,
-        path: P,
-    ) -> Result<Box<dyn FileRead + '_>> {
+    pub fn read_file<P: AsRef<Path>>(&mut self, path: P) -> Result<Box<dyn FileRead + '_>> {
         let root = if tracing::enabled!(tracing::Level::DEBUG) {
             self.root().to_owned()
         } else {
@@ -88,12 +83,7 @@ impl FileSystem {
         let file = match self {
             Self::Disk(fs) => fs.read_file(path.as_ref()),
             Self::Zip(fs) => fs.read_file(path.as_ref()),
-            Self::Empty => {
-                Err(Error::new(
-                    ErrorKind::NotFound,
-                    "No file system available"
-                ))
-            }
+            Self::Empty => Err(Error::new(ErrorKind::NotFound, "No file system available")),
         };
 
         debug!(
@@ -106,10 +96,7 @@ impl FileSystem {
         file
     }
 
-    pub fn exists<P: AsRef<Path>>(
-        &self,
-        path: P,
-    ) -> bool {
+    pub fn exists<P: AsRef<Path>>(&self, path: P) -> bool {
         let result = match self {
             Self::Disk(fs) => fs.exists(path.as_ref()),
             Self::Zip(fs) => fs.exists(path.as_ref()),
@@ -126,10 +113,7 @@ impl FileSystem {
         result
     }
 
-    pub fn is_file<P: AsRef<Path>>(
-        &mut self,
-        path: P,
-    ) -> bool {
+    pub fn is_file<P: AsRef<Path>>(&mut self, path: P) -> bool {
         let result = match self {
             Self::Disk(fs) => fs.is_file(path.as_ref()),
             Self::Zip(fs) => fs.is_file(path.as_ref()),
@@ -147,10 +131,7 @@ impl FileSystem {
         result
     }
 
-    pub fn is_directory<P: AsRef<Path>>(
-        &mut self,
-        path: P,
-    ) -> bool {
+    pub fn is_directory<P: AsRef<Path>>(&mut self, path: P) -> bool {
         let result = match self {
             Self::Disk(fs) => fs.is_directory(path.as_ref()),
             Self::Zip(fs) => fs.is_directory(path.as_ref()),
@@ -168,10 +149,7 @@ impl FileSystem {
         result
     }
 
-    pub fn absolute_path<P: AsRef<Path>>(
-        &self,
-        path: P,
-    ) -> Result<Option<PathBuf>> {
+    pub fn absolute_path<P: AsRef<Path>>(&self, path: P) -> Result<Option<PathBuf>> {
         let abs_path = match self {
             Self::Disk(fs) => Some(sanitize_path(fs.root(), path.as_ref())?),
             Self::Zip(_) => None,
@@ -187,7 +165,6 @@ impl FileSystem {
 
         Ok(abs_path)
     }
-
 }
 
 #[derive(Debug)]
@@ -196,10 +173,9 @@ pub struct DiskFileSystem {
 }
 
 impl DiskFileSystem {
-
     fn new(root: &Path) -> Result<Self> {
         Ok(Self {
-            root: root.canonicalize_utf8()?
+            root: root.canonicalize_utf8()?,
         })
     }
 
@@ -212,21 +188,16 @@ impl DiskFileSystem {
             .follow_links(false)
             .follow_root_links(false)
             .into_iter()
-            .map(|entry| {
-                match entry {
-                    Ok(e) => PathBuf::try_from(e.into_path())
-                        .map_err(Error::other),
-                    Err(e) => Err(e.into_io_error()
-                        .expect("Failed to convert error to IO error")),
-                }
+            .map(|entry| match entry {
+                Ok(e) => PathBuf::try_from(e.into_path()).map_err(Error::other),
+                Err(e) => Err(e
+                    .into_io_error()
+                    .expect("Failed to convert error to IO error")),
             })
             .collect::<Vec<_>>()
     }
 
-    fn read_directory(
-        &self,
-        path: &Path,
-    ) -> Result<Vec<Result<PathBuf>>> {
+    fn read_directory(&self, path: &Path) -> Result<Vec<Result<PathBuf>>> {
         let path = sanitize_path(&self.root, path)?;
 
         if !path.is_dir() {
@@ -265,10 +236,7 @@ impl DiskFileSystem {
         Ok(results)
     }
 
-    fn read_file(
-        &mut self,
-        path: &Path
-    ) -> Result<Box<dyn FileRead>> {
+    fn read_file(&mut self, path: &Path) -> Result<Box<dyn FileRead>> {
         let path = sanitize_path(&self.root, path)?;
 
         if !path.is_file() {
@@ -278,33 +246,23 @@ impl DiskFileSystem {
         Ok(Box::new(File::open(path)?))
     }
 
-    fn exists(
-        &self,
-        path: &Path,
-    ) -> bool {
+    fn exists(&self, path: &Path) -> bool {
         sanitize_path(&self.root, path)
             .map(|p| p.exists())
             .unwrap_or(false)
     }
 
-    fn is_file(
-        &self,
-        path: &Path,
-    ) -> bool {
+    fn is_file(&self, path: &Path) -> bool {
         sanitize_path(&self.root, path)
             .map(|p| p.is_file())
             .unwrap_or(false)
     }
 
-    fn is_directory(
-        &self,
-        path: &Path,
-    ) -> bool {
+    fn is_directory(&self, path: &Path) -> bool {
         sanitize_path(&self.root, path)
             .map(|p| p.is_dir())
             .unwrap_or(false)
     }
-
 }
 
 #[derive(Debug)]
@@ -315,7 +273,6 @@ pub struct ZipFileSystem {
 }
 
 impl ZipFileSystem {
-
     fn new(path: &Path) -> Result<Self> {
         let file = File::open(path)?;
         let mut archive = ZipArchive::new(BufReader::new(file))?;
@@ -349,63 +306,47 @@ impl ZipFileSystem {
     }
 
     fn files(&self) -> Vec<Result<PathBuf>> {
-        self.archive.file_names()
+        self.archive
+            .file_names()
             .map(|name| Ok(PathBuf::from(name)))
             .collect()
     }
 
-    fn read_directory(
-        &self,
-        path: &Path,
-    ) -> Result<Vec<Result<PathBuf>>> {
-        let node = self.node.get(path)
+    fn read_directory(&self, path: &Path) -> Result<Vec<Result<PathBuf>>> {
+        let node = self
+            .node
+            .get(path)
             .ok_or_else(|| Error::from(ErrorKind::NotFound))?;
 
-        Ok(node.iter()
+        Ok(node
+            .iter()
             .map(|name| path.join(name))
             .map(|name| Ok(PathBuf::from(name)))
             .collect::<Vec<_>>())
     }
 
-    fn read_file(
-        &mut self,
-        path: &Path,
-    ) -> Result<Box<dyn FileRead + '_>> {
-        let node = self.node.get(path)
+    fn read_file(&mut self, path: &Path) -> Result<Box<dyn FileRead + '_>> {
+        let node = self
+            .node
+            .get(path)
             .ok_or_else(|| Error::from(ErrorKind::NotFound))?;
-        let index = node.index
-            .ok_or_else(|| Error::from(ErrorKind::NotFound))?;
-        let file = self.archive.by_index(index)
-            .map_err(Error::other)?;
+        let index = node.index.ok_or_else(|| Error::from(ErrorKind::NotFound))?;
+        let file = self.archive.by_index(index).map_err(Error::other)?;
 
         Ok(Box::new(file))
     }
 
-    fn exists(
-        &self,
-        path: &Path,
-    ) -> bool {
+    fn exists(&self, path: &Path) -> bool {
         self.node.get(path).is_some()
     }
 
-    fn is_file(
-        &mut self,
-        path: &Path,
-    ) -> bool {
-        self.node.get(path)
-            .map(|n| n.is_file)
-            .unwrap_or(false)
+    fn is_file(&mut self, path: &Path) -> bool {
+        self.node.get(path).map(|n| n.is_file).unwrap_or(false)
     }
 
-    fn is_directory(
-        &mut self,
-        path: &Path,
-    ) -> bool {
-        self.node.get(path)
-            .map(|n| !n.is_file)
-            .unwrap_or(false)
+    fn is_directory(&mut self, path: &Path) -> bool {
+        self.node.get(path).map(|n| !n.is_file).unwrap_or(false)
     }
-
 }
 
 #[derive(Debug)]
@@ -416,7 +357,6 @@ struct TreeNode {
 }
 
 impl TreeNode {
-
     fn new() -> Self {
         Self {
             children: HashMap::new(),
@@ -467,12 +407,10 @@ impl TreeNode {
         Ok(())
     }
 
-    fn get(
-        &self,
-        path: impl AsRef<Path>,
-    ) -> Option<&Self> {
+    fn get(&self, path: impl AsRef<Path>) -> Option<&Self> {
         let path = path.as_ref();
-        let components: Vec<&str> = path.components()
+        let components: Vec<&str> = path
+            .components()
             .map(|c| c.as_str())
             .filter(|s| !s.is_empty())
             .collect();
@@ -480,10 +418,7 @@ impl TreeNode {
         self.get_internal(&components)
     }
 
-    fn get_internal(
-        &self,
-        components: &[&str],
-    ) -> Option<&Self> {
+    fn get_internal(&self, components: &[&str]) -> Option<&Self> {
         if components.is_empty() {
             return Some(self);
         }
@@ -500,13 +435,9 @@ impl TreeNode {
     fn iter(&self) -> impl Iterator<Item = &String> {
         self.children.keys()
     }
-
 }
 
-fn sanitize_path(
-    root: &Path,
-    path: &Path,
-) -> Result<PathBuf> {
+fn sanitize_path(root: &Path, path: &Path) -> Result<PathBuf> {
     assert!(root.is_absolute(), "Root path must be absolute");
 
     let path = root.join(path).canonicalize_utf8()?;

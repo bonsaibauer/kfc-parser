@@ -15,7 +15,7 @@ pub fn loader_attach(
     _env: &ModEnvironment,
     _options: RuntimeOptions,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    log::info!("Attaching runtime loader");
+    log::debug!("Attaching runtime loader");
 
     // let mut libraries = LIBRARIES.lock();
     //
@@ -29,7 +29,7 @@ pub fn loader_attach(
 }
 
 pub fn loader_detach() -> Result<(), Box<dyn std::error::Error>> {
-    log::info!("Detaching runtime loader");
+    log::debug!("Detaching runtime loader");
 
     // LIBRARIES.lock().clear();
 

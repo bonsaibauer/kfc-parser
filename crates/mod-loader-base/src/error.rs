@@ -1,6 +1,9 @@
 use thiserror::Error;
 
-use crate::{alias::{Path, PathBuf}, ModRegistry};
+use crate::{
+    ModRegistry,
+    alias::{Path, PathBuf},
+};
 
 #[derive(Debug, Error)]
 #[error("Error loading mod environment")]
@@ -11,10 +14,7 @@ pub struct ModEnvironmentErrorReport {
 }
 
 impl ModEnvironmentErrorReport {
-
-    pub(crate) fn base_io(
-        error: IoError,
-    ) -> Self {
+    pub(crate) fn base_io(error: IoError) -> Self {
         Self {
             error: Some(error),
             mods: Default::default(),
@@ -32,7 +32,6 @@ impl ModEnvironmentErrorReport {
             mod_registry,
         }
     }
-
 }
 
 #[derive(Debug, Error)]
@@ -44,11 +43,7 @@ pub struct ModErrorReport {
 }
 
 impl ModErrorReport {
-
-    pub(crate) fn new(
-        path: impl AsRef<Path>,
-        error: ModError,
-    ) -> Self {
+    pub(crate) fn new(path: impl AsRef<Path>, error: ModError) -> Self {
         Self {
             path: path.as_ref().to_path_buf(),
             id: None,
@@ -56,16 +51,11 @@ impl ModErrorReport {
         }
     }
 
-    pub(crate) fn with_id(
-        mut self,
-        id: String,
-    ) -> Self {
+    pub(crate) fn with_id(mut self, id: String) -> Self {
         self.id = Some(id);
         self
     }
-
 }
-
 
 #[derive(Debug, Error)]
 pub enum ModError {

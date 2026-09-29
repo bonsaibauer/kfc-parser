@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::{alias::{Path, PathBuf}, ModEnvironmentErrorReport, ModRegistry};
+use crate::{
+    ModEnvironmentErrorReport, ModRegistry,
+    alias::{Path, PathBuf},
+};
 
 struct ModEnvironmentInner {
     game_dir: PathBuf,
@@ -16,13 +19,17 @@ pub struct ModEnvironment {
 }
 
 impl ModEnvironment {
-
-    pub fn load(
-        game_dir: impl AsRef<Path>,
-    ) -> Result<Self, ModEnvironmentErrorReport> {
+    pub fn load(game_dir: impl AsRef<Path>) -> Result<Self, ModEnvironmentErrorReport> {
         let game_dir = game_dir.as_ref().to_path_buf();
-        let cache_dir = game_dir.join(".cache");
-        let mods_dir = game_dir.join("mods");
+        let cache_dir =
+            PathBuf::from_path_buf(crate::shroudforge_cache_dir(game_dir.as_std_path()))
+                .expect("a UTF-8 game path joined with loader cache paths remains UTF-8");
+        let mods_dir = PathBuf::from_path_buf(crate::shroudforge_directory(
+            game_dir.as_std_path(),
+            "mods",
+            "mods",
+        ))
+        .expect("a UTF-8 game path joined with loader mods paths remains UTF-8");
 
         let registry = ModRegistry::load(&mods_dir)?;
 
@@ -51,5 +58,4 @@ impl ModEnvironment {
     pub fn mod_registry(&self) -> &ModRegistry {
         &self.inner.registry
     }
-
 }

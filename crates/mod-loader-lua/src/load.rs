@@ -87,7 +87,7 @@ pub fn create_backup(
     let bak_path = Path::new(&bak_path);
 
     if bak_path.exists() && !validate_backup(path, bak_path) {
-        warn!(
+        debug!(
             path = ?path,
             backup_path = ?bak_path,
             "Backup file is not compatible with the current KFC file, creating a new backup.",
@@ -206,7 +206,7 @@ pub fn load_type_registry(
     file_name: &str,
 ) -> Result<(TypeRegistry, bool), ()> {
     if let Err(e) = std::fs::create_dir_all(cache_dir) {
-        warn!(
+        error!(
             error = %e,
             path = ?cache_dir,
             "Failed to create cache directory, unable to load or save type registry",
@@ -264,7 +264,7 @@ pub fn load_type_registry(
         Some(type_registry) => {
             if let Some(version_tag) = &version_tag {
                 if version_tag != &type_registry.version {
-                    warn!(
+                    debug!(
                         path = ?types_path,
                         kfc_path = ?kfc_path,
                         "Type registry is outdated, attempting to extract types again..."
@@ -291,7 +291,7 @@ pub fn load_type_registry(
                     match serde_json::to_string(&registry) {
                         Ok(json) => {
                             if let Err(e) = std::fs::write(&types_path, json) {
-                                warn!(
+                                debug!(
                                     error = %e,
                                     path = ?types_path,
                                     "Failed to write type registry to file",
@@ -299,7 +299,7 @@ pub fn load_type_registry(
                             }
                         }
                         Err(e) => {
-                            warn!(
+                            debug!(
                                 error = %e,
                                 path = ?types_path,
                                 "Failed to serialize type registry to JSON",
@@ -307,7 +307,7 @@ pub fn load_type_registry(
                         }
                     }
                 } else {
-                    warn!(
+                    debug!(
                         path = ?types_path,
                         kfc_path = ?kfc_path,
                         "No version tag found, type registry cannot be saved",
@@ -329,7 +329,7 @@ pub fn load_type_registry(
         }
     };
 
-    info!(
+    debug!(
         path = ?types_path,
         exe_path = ?exe_path,
         kfc_path = ?kfc_path,
@@ -349,7 +349,7 @@ pub fn export_lua_definitions(
     let lua_cache_dir = cache_dir.join("lua");
 
     if let Err(e) = std::fs::create_dir_all(&lua_cache_dir) {
-        warn!(
+        debug!(
             error = %e,
             path = ?lua_cache_dir,
             "Failed to create lua cache directory, unable to generate lua definitions",
@@ -362,12 +362,12 @@ pub fn export_lua_definitions(
             let def = crate::definition::generator::generate(type_registry);
 
             match std::fs::write(&lua_type_def_path, def) {
-                Ok(_) => info!(
+                Ok(_) => debug!(
                     path = ?lua_type_def_path,
                     "Lua type definition file has been generated",
                 ),
                 Err(e) => {
-                    warn!(
+                    debug!(
                         error = %e,
                         path = ?lua_type_def_path,
                         "Failed to write lua type definition file",
@@ -378,12 +378,12 @@ pub fn export_lua_definitions(
 
         if force || !lua_base_def_path.exists() {
             match std::fs::write(&lua_base_def_path, crate::definition::DEFINITION_FILE) {
-                Ok(_) => info!(
+                Ok(_) => debug!(
                     path = ?lua_base_def_path,
                     "Lua base definition file has been generated",
                 ),
                 Err(e) => {
-                    warn!(
+                    debug!(
                         error = %e,
                         path = ?lua_base_def_path,
                         "Failed to write lua base definition file",

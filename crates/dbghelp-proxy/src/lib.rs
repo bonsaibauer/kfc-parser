@@ -544,14 +544,18 @@ extern "system" fn DllMain(
                     let config = Config::load("eml.json")
                         .unwrap_or_default();
 
-                    if enable_console || config.enable_console {
+                    if !init::shroudforge_bootstrap_available()
+                        && (enable_console || config.enable_console)
+                    {
                         crate::enable_console();
                     }
 
                     init::init(config);
                 }
                 Err(e) => {
-                    panic!("Failed to initialize dbghelp proxy: {e}");
+                    let message = format!("Failed to initialize dbghelp proxy: {e}");
+                    mod_loader::append_shroudforge_diagnostic('E', "native-proxy", &message);
+                    panic!("{message}");
                 }
             }
         }
@@ -641,7 +645,10 @@ unsafe fn init_procs() -> Result<(), String> {
                 M_PROCS[i] = addr as _;
             },
             None => {
-                println!("Warning: {} is missing in dbghelp.dll", NAMES[i].to_string_lossy());
+                let warning = format!("{} is missing in dbghelp.dll", NAMES[i].to_string_lossy());
+                if !mod_loader::append_shroudforge_diagnostic('W', "native-proxy", &warning) {
+                    println!("Warning: {warning}");
+                }
 
                 unsafe {
                     M_PROCS[i] = missing_proc as _;

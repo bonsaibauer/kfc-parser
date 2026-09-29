@@ -16,4 +16,7 @@ semver.workspace = true
 
 tracing.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.60.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }
+
 zip = "4.2.0"

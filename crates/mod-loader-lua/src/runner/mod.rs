@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use mod_loader::{Capability, Mod, ModManifest, ModRegistry};
-use tracing::info;
+use tracing::debug;
 
 use crate::{env::{AppFeatures, AppState}, lua::{FunctionArgs, LuaVM}, runner::state::{RunnerLocalState, RunnerState}};
 
@@ -42,7 +42,7 @@ impl LuaModRunner {
                 continue;
             }
 
-            info!(
+            debug!(
                 mod_id = r#mod.info().id,
                 mod_name = r#mod.info().name,
                 "Running mod",

@@ -1190,6 +1190,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tracing",
  "walkdir",
+ "windows-sys 0.60.2",
  "zip",
 ]
 
@@ -1231,6 +1232,7 @@ dependencies = [
 name = "mod-manager-cli"
 version = "0.1.2"
 dependencies = [
+ "camino",
  "clap",
  "clap_derive",
  "colored",

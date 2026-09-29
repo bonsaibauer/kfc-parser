@@ -1,9 +1,7 @@
-use std::path::PathBuf;
-
 use kfc::reflection::LookupKey;
 use mod_loader::ModEnvironment;
 
-use crate::{alias::Path, cache::{CacheDiff, FileStateCache}, env::{AppFeatures, AppState}, log::info, runner::LuaModRunner};
+use crate::{alias::{Path, PathBuf}, cache::{CacheDiff, FileStateCache}, env::{AppFeatures, AppState}, log::{debug, info}, runner::LuaModRunner};
 
 mod runner;
 mod definition;
@@ -47,7 +45,7 @@ pub fn run(
     env: &ModEnvironment,
     mut args: RunArgs,
 ) -> anyhow::Result<RunResult> {
-    info!("Running lua with options: {:?}", args);
+    debug!("Running lua with options: {:?}", args);
 
     // check cache if files have changed
 
@@ -63,7 +61,7 @@ pub fn run(
         if cache_diff.is_none() && args.options.patch {
             args.options.patch = false;
 
-            info!("No changes detected, skipping patching");
+            debug!("No changes detected, skipping patching");
 
             if !args.options.runtime {
                 return Ok(RunResult::default());
@@ -72,7 +70,7 @@ pub fn run(
 
         cache_diff
     } else {
-        info!("Skipping cache check");
+        debug!("Skipping cache check");
         CacheDiff::new_dirty()
     };
 
@@ -98,7 +96,7 @@ pub fn run(
         }
     }
 
-    info!("Running mods...");
+    debug!("Running mods...");
 
     // TODO: move this somewhere else, maybe to the GameContext?
 
@@ -107,7 +105,7 @@ pub fn run(
     let app_state = runner.lua.app_data_ref::<AppState>().unwrap();
 
     if app_state.has_feature(AppFeatures::PATCH) {
-        info!("Applying patches...");
+        debug!("Applying patches...");
 
         let mut buf = Vec::new();
         let mut writer = app_state.take_writer();
@@ -157,7 +155,6 @@ pub fn run(
     Ok(RunResult {
         dlls: app_state.registered_dlls()
             .into_iter()
-            .map(|path| path.into_std_path_buf())
             .collect::<Vec<_>>(),
     })
 }
@@ -168,7 +165,8 @@ pub fn export_lua_definitions(
     force: bool,
 ) -> bool {
     let game_dir = game_dir.as_ref();
-    let cache_dir = game_dir.join(".cache");
+    let cache_dir = PathBuf::from_path_buf(mod_loader::shroudforge_cache_dir(game_dir.as_std_path()))
+        .expect("a UTF-8 game path joined with loader cache paths remains UTF-8");
     let (type_registry, is_dirty) = match crate::load::load_type_registry(
         game_dir,
         &cache_dir,

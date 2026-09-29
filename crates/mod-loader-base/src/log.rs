@@ -24,7 +24,7 @@ macro_rules! debug {
     };
 }
 
+pub(crate) use debug;
+pub(crate) use error;
 pub(crate) use info;
 pub(crate) use warning as warn; // use alias to resolve ambiguity with builtin attribute
-pub(crate) use error;
-pub(crate) use debug;

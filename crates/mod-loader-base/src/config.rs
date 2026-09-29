@@ -21,14 +21,8 @@ impl Default for Config {
 }
 
 impl Config {
-
     pub fn load(path: impl AsRef<std::path::Path>) -> Result<Self, Box<dyn std::error::Error>> {
         if !path.as_ref().exists() {
-            let default = Self::default();
-            let json = serde_json::to_string_pretty(&default)?;
-
-            std::fs::write(path, json)?;
-
             return Ok(Self::default());
         }
 
@@ -37,5 +31,30 @@ impl Config {
 
         Ok(config)
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use super::Config;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn loading_missing_config_does_not_create_it() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock is after the Unix epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "shroudforge-eml-config-{}-{nonce}.json",
+            std::process::id()
+        ));
+        assert!(!path.exists(), "test path unexpectedly already exists");
+
+        let config = Config::load(&path).expect("missing config should use defaults");
+
+        assert!(!config.enable_console);
+        assert!(!config.use_export_flag);
+        assert!(config.export_directory.is_none());
+        assert!(!path.exists(), "loading config created eml.json");
+    }
 }

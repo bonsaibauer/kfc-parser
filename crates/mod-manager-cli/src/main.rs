@@ -327,7 +327,11 @@ fn run(
                 skip_cache: force,
                 patch,
                 export,
-                export_dir: Some(export_directory),
+                export_dir: Some(
+                    camino::Utf8PathBuf::from_path_buf(export_directory).map_err(|path| {
+                        format!("Export directory is not valid UTF-8: {}", path.display())
+                    })?,
+                ),
                 ..Default::default()
             },
         },
