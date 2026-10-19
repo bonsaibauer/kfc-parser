@@ -537,6 +537,7 @@ version = "0.2.0"
 dependencies = [
  "camino",
  "mod-loader",
+ "mod-loader-bridge",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -599,6 +600,7 @@ version = "0.2.0"
 dependencies = [
  "camino",
  "mod-loader",
+ "mod-loader-bridge",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -952,7 +954,9 @@ dependencies = [
  "kfc-base",
  "kfc-content",
  "kfc-resource",
+ "serde",
  "serde_json",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -1191,6 +1195,14 @@ dependencies = [
  "tracing",
  "walkdir",
  "zip",
+]
+
+[[package]]
+name = "mod-loader-bridge"
+version = "0.2.0"
+dependencies = [
+ "serde_json",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

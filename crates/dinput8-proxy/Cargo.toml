@@ -10,6 +10,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 mod-loader = { path = "../mod-loader", features = ["lua", "runtime"] }
+# Shared startup routing. EML still follows this proxy's existing initialization path.
+mod-loader-bridge = { path = "../mod-loader-bridge" }
 
 camino.workspace = true
 

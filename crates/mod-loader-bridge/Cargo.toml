@@ -1,0 +1,16 @@
+[package]
+name = "mod-loader-bridge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Read only the existing ShroudForge modloader selector. Missing config preserves EML startup.
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# Load ShroudForge's existing winmm bootstrap when ShroudForge is selected.
+windows-sys = { version = "0.60.2", features = [
+    "Win32_Foundation",
+    "Win32_System_LibraryLoader",
+] }

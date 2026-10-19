@@ -5,6 +5,11 @@ version.workspace = true
 authors.workspace = true
 
 [dependencies]
+# These serialization and error types support ShroudForge's additive schema API.
+# They do not change how the existing KFC reader or writer processes files.
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
 kfc-base = { path = "../kfc-base" }
 kfc-resource = { path = "../kfc-resource", optional = true }
 kfc-content = { path = "../kfc-content", optional = true }

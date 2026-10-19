@@ -11,6 +11,10 @@ members = [
     "crates/mod-loader-lua",
     "crates/mod-loader-runtime",
 
+    # EML and ShroudForge startup routing lives here. This adds dispatch without
+    # changing the parser or either loader's implementation.
+    "crates/mod-loader-bridge",
+
     "crates/mod-manager-cli",
     "crates/mod-manager-gui",
 

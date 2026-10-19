@@ -8,7 +8,7 @@ use std::ffi::CString;
 use mod_loader::Config;
 use windows::{
     Win32::{
-        Foundation::{HINSTANCE, MAX_PATH, TRUE},
+        Foundation::{FALSE, HINSTANCE, MAX_PATH, TRUE},
         System::{
             Console::{AllocConsole, GetConsoleWindow},
             LibraryLoader::{GetProcAddress, LoadLibraryA},
@@ -65,18 +65,28 @@ extern "system" fn DllMain(
 
             match unsafe { init_procs() } {
                 Ok(()) => {
-                    let enable_console = std::env::var("EML_CONSOLE")
-                        .map(|s| matches!(s.to_lowercase().as_str(), "true" | "1" | "yes"))
-                        .unwrap_or(false);
+                    // EML versus ShroudForge: the bridge selects the owner once. EML
+                    // runs the original initialization below. ShroudForge loads its
+                    // own bootstrap and must not also start EML in this proxy.
+                    match mod_loader_bridge::try_start() {
+                        mod_loader_bridge::Handoff::Started => {}
+                        mod_loader_bridge::Handoff::EmlSelected => {
+                            let enable_console = std::env::var("EML_CONSOLE")
+                                .map(|s| matches!(s.to_lowercase().as_str(), "true" | "1" | "yes"))
+                                .unwrap_or(false);
 
-                    let config = Config::load("eml.json")
-                        .unwrap_or_default();
+                            let config = Config::load("eml.json")
+                                .unwrap_or_default();
 
-                    if enable_console || config.enable_console {
-                        crate::enable_console();
+                            if enable_console || config.enable_console {
+                                crate::enable_console();
+                            }
+
+                            init::init(config);
+                        }
+                        // A selected ShroudForge installation must not fall through to EML.
+                        mod_loader_bridge::Handoff::Failed => return FALSE,
                     }
-
-                    init::init(config);
                 }
                 Err(e) => {
                     panic!("Failed to initialize dinput8 proxy: {e}");
@@ -87,7 +97,11 @@ extern "system" fn DllMain(
             // A non-null lpReserved means the process is terminating. Other threads
             // are already gone and thread-local storage (used by logging) may
             // already be destroyed, so do not run any cleanup in that case.
-            if _reserved.is_null() {
+            // EML teardown runs only after EML startup. ShroudForge owns its
+            // lifecycle and skipped this proxy's EML initialization.
+            if _reserved.is_null()
+                && mod_loader_bridge::selected_backend() == mod_loader_bridge::Backend::Eml
+            {
                 init::deinit();
             }
         }
