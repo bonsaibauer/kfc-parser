@@ -58,23 +58,25 @@ impl AppState {
 
         let options = args.options;
         let export_dir = options.export_dir
-            .map(|d| d.canonicalize())
-            .transpose()
-            .map_err(|e| {
-                warn!(
-                    error = %e,
-                    "Failed to canonicalize export directory, using default instead"
-                );
-            })?
-            .map(|d| {
-                PathBuf::from_path_buf(d)
+            .and_then(|d| {
+                d.canonicalize()
+                    .map_err(|e| {
+                        warn!(
+                            error = %e,
+                            "Failed to canonicalize export directory, using default instead"
+                        );
+                    })
+                    .ok()
             })
-            .transpose()
-            .map_err(|_| {
-                warn!(
-                    "Export directory is not valid UTF-8, using default instead"
-                );
-            })?
+            .and_then(|d| {
+                PathBuf::from_path_buf(d)
+                    .map_err(|_| {
+                        warn!(
+                            "Export directory is not valid UTF-8, using default instead"
+                        );
+                    })
+                    .ok()
+            })
             .unwrap_or_else(|| env.game_dir().join("export"));
 
         let skip_cache = options.skip_cache;
@@ -291,7 +293,10 @@ impl AppState {
         type_index: TypeIndex,
         lua: &mlua::Lua,
     ) -> mlua::Result<ResourceId> {
-        let r#type = self.type_registry.get(type_index).unwrap();
+        let r#type = self.type_registry.get(type_index)
+            .ok_or_else(|| LuaError::generic(format!(
+                "type with index {type_index} not found"
+            )))?;
         let resources = self.resources.borrow_mut();
         let mut guid: ResourceId;
 
@@ -316,6 +321,11 @@ impl AppState {
         Ok(guid)
     }
 
+    pub fn has_content(&self, guid: &ContentHash) -> bool {
+        self.new_contents.borrow().contains_key(guid)
+            || self.kfc_file().contents().contains_key(guid)
+    }
+
     pub fn get_content(
         &self,
         guid: &ContentHash,
@@ -338,7 +348,9 @@ impl AppState {
         if let hash_map::Entry::Vacant(e) = self.new_contents.borrow_mut().entry(guid) {
             self.writer.borrow_mut()
                 .as_mut()
-                .expect("KFCWriter no longer available")
+                .ok_or_else(|| LuaError::generic(
+                    "cannot create content: KFCWriter is no longer available"
+                ))?
                 .write_content(&guid, data)?;
 
             // TODO: attach a reader to the writer to avoid cloning
