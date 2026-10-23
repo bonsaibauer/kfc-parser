@@ -7,3 +7,4 @@ DllGetClassObject	@3
 DllRegisterServer	@4
 DllUnregisterServer	@5
 GetdfDIJoystick		@6
+ShroudforgeSetDinput8Provider

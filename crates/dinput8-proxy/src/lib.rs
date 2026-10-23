@@ -2,13 +2,20 @@ pub mod logging;
 mod init;
 mod log;
 
-use std::{arch::naked_asm, ffi::{c_void, CStr}, panic::PanicHookInfo, ptr};
+use std::{
+    arch::naked_asm,
+    cell::Cell,
+    ffi::{c_void, CStr},
+    panic::PanicHookInfo,
+    ptr,
+    sync::atomic::{AtomicPtr, Ordering},
+};
 use std::ffi::CString;
 
 use mod_loader::Config;
 use windows::{
     Win32::{
-        Foundation::{FALSE, HINSTANCE, MAX_PATH, TRUE},
+        Foundation::{FALSE, HINSTANCE, HMODULE, MAX_PATH, TRUE},
         System::{
             Console::{AllocConsole, GetConsoleWindow},
             LibraryLoader::{GetProcAddress, LoadLibraryA},
@@ -17,7 +24,7 @@ use windows::{
         },
         UI::WindowsAndMessaging::{MB_OK, MessageBoxA, SW_SHOW, ShowWindow},
     },
-    core::{BOOL, PCSTR},
+    core::{BOOL, GUID, HRESULT, PCSTR},
 };
 
 static NAMES: [&CStr; 6] = [
@@ -30,6 +37,92 @@ static NAMES: [&CStr; 6] = [
 ];
 
 static mut M_PROCS: [*const c_void; NAMES.len()] = [ptr::null(); NAMES.len()];
+static OWN_MODULE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static ORIGINAL_CREATE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static CHAIN_CREATE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+
+thread_local! {
+    static IN_CHAIN_CREATE: Cell<bool> = const { Cell::new(false) };
+}
+
+type CreateDirectInput = unsafe extern "system" fn(
+    HINSTANCE,
+    u32,
+    *const GUID,
+    *mut *mut c_void,
+    *mut c_void,
+) -> HRESULT;
+
+/// Selects the first DirectInput provider from the loader's ordered DLL plan.
+/// The caller owns the module and must keep it loaded until process exit.
+/// This function does not load files and must be called outside DllMain.
+///
+/// # Safety
+/// `module` must be a valid, loaded module handle whose DirectInput8Create
+/// export follows the Windows ABI and remains available until process exit.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ShroudforgeSetDinput8Provider(module: HMODULE) -> BOOL {
+    if module.is_invalid() || module.0 == OWN_MODULE.load(Ordering::Acquire) {
+        return FALSE;
+    }
+    let Some(create) =
+        (unsafe { GetProcAddress(module, PCSTR(c"DirectInput8Create".as_ptr().cast())) })
+    else {
+        return FALSE;
+    };
+    let create = create as *mut c_void;
+    if create == DirectInput8Create as *mut c_void
+        || create == ORIGINAL_CREATE.load(Ordering::Acquire)
+    {
+        return FALSE;
+    }
+
+    match CHAIN_CREATE.compare_exchange(
+        ptr::null_mut(),
+        create,
+        Ordering::AcqRel,
+        Ordering::Acquire,
+    ) {
+        Ok(_) => TRUE,
+        Err(selected) if selected == create => TRUE,
+        Err(_) => FALSE,
+    }
+}
+
+#[unsafe(no_mangle)]
+unsafe extern "system" fn DirectInput8Create(
+    instance: HINSTANCE,
+    version: u32,
+    interface: *const GUID,
+    output: *mut *mut c_void,
+    outer: *mut c_void,
+) -> HRESULT {
+    let original = ORIGINAL_CREATE.load(Ordering::Acquire);
+    if original.is_null() {
+        return HRESULT(0x80004005u32 as i32);
+    }
+
+    IN_CHAIN_CREATE.with(|active| {
+        let selected = CHAIN_CREATE.load(Ordering::Acquire);
+        if selected.is_null() || active.get() {
+            let create: CreateDirectInput = unsafe { std::mem::transmute(original) };
+            return unsafe { create(instance, version, interface, output, outer) };
+        }
+
+        // A provider may forward back to this proxy. Its nested call must use
+        // System32 instead of entering the selected provider a second time.
+        active.set(true);
+        struct ResetChainCall<'a>(&'a Cell<bool>);
+        impl Drop for ResetChainCall<'_> {
+            fn drop(&mut self) {
+                self.0.set(false);
+            }
+        }
+        let _reset = ResetChainCall(active);
+        let create: CreateDirectInput = unsafe { std::mem::transmute(selected) };
+        unsafe { create(instance, version, interface, output, outer) }
+    })
+}
 
 macro_rules! forward {
     ($name:ident, $idx:expr) => {
@@ -45,7 +138,6 @@ macro_rules! forward {
     };
 }
 
-forward!(DirectInput8Create, 0);
 forward!(DllCanUnloadNow,    1);
 forward!(DllGetClassObject,  2);
 forward!(DllRegisterServer,  3);
@@ -61,6 +153,7 @@ extern "system" fn DllMain(
     #[allow(non_snake_case)] // false positive
     match reason {
         DLL_PROCESS_ATTACH => {
+            OWN_MODULE.store(_hinst.0, Ordering::Release);
             std::panic::set_hook(Box::new(panic_handler));
 
             match unsafe { init_procs() } {
@@ -186,6 +279,9 @@ unsafe fn init_procs() -> Result<(), String> {
         match addr {
             Some(addr) => unsafe {
                 M_PROCS[i] = addr as _;
+                if i == 0 {
+                    ORIGINAL_CREATE.store(addr as *mut c_void, Ordering::Release);
+                }
             },
             None => {
                 println!("Warning: {} is missing in dinput8.dll", NAMES[i].to_string_lossy());
