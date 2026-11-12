@@ -108,12 +108,16 @@ impl Value {
             PrimitiveType::ObjectReference | PrimitiveType::Guid => self.write_guid(writer)?,
         }
 
-        // fill remaining space with zeroes
+        // Fields need not be ordered by offset. Extend storage only when
+        // needed, without overwriting bytes written by an earlier field.
         let end_offset = base_offset + r#type.size as u64;
 
         if writer.stream_position()? < end_offset {
-            writer.seek(SeekFrom::Start(end_offset - 1))?;
-            writer.write_u8(0)?;
+            if writer.seek(SeekFrom::End(0))? < end_offset {
+                writer.seek(SeekFrom::Start(end_offset - 1))?;
+                writer.write_u8(0)?;
+            }
+            writer.seek(SeekFrom::Start(end_offset))?;
         }
 
         Ok(())
@@ -697,11 +701,8 @@ impl Value {
                 return Ok(());
             }
 
-            let mut offset = writer.write_blob_header(
-                blob_size,
-                alignment,
-                Some(values.len() as u32)
-            )?;
+            let mut offset =
+                writer.write_blob_header(blob_size, alignment, Some(values.len() as u32))?;
 
             for (i, value) in values.iter().enumerate() {
                 writer.path.push_index(i);
@@ -749,11 +750,8 @@ impl Value {
         }
 
         if let Some(value) = self.as_string() {
-            let offset = writer.write_blob_header(
-                value.len() as u64,
-                1,
-                Some(value.len() as u32)
-            )?;
+            let offset =
+                writer.write_blob_header(value.len() as u64, 1, Some(value.len() as u32))?;
 
             writer.seek(SeekFrom::Start(offset))?;
             writer.write_all(value.as_bytes())?;
@@ -796,11 +794,8 @@ impl Value {
             return Ok(());
         }
 
-        let offset = writer.write_blob_header(
-            inner_type.size as u64,
-            inner_type.alignment as u64,
-            None
-        )?;
+        let offset =
+            writer.write_blob_header(inner_type.size as u64, inner_type.alignment as u64, None)?;
 
         self.write_internal(inner_type, writer, offset)
     }
@@ -900,10 +895,11 @@ impl Value {
             let variant_value = value
                 .get("$value")
                 .map(|v| {
-                    v.as_struct().ok_or_else(|| WriteErrorInfo::IncompatibleType {
-                        got: v.to_string(),
-                        expected: "struct".to_string(),
-                    })
+                    v.as_struct()
+                        .ok_or_else(|| WriteErrorInfo::IncompatibleType {
+                            got: v.to_string(),
+                            expected: "struct".to_string(),
+                        })
                 })
                 .transpose()?
                 .ok_or_else(|| WriteErrorInfo::MissingField("$value".to_string()))?;
